@@ -1,0 +1,164 @@
+-- God Mode REAL (Anti-Morte) para Darkness Hub
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "🌌 Darkness Hub | God Mode REAL",
+    LoadingTitle = "✨ Carregando...",
+    LoadingSubtitle = "Anti-Morte com proteção máxima",
+    Theme = "Crimson",
+    ToggleUIKeybind = Enum.KeyCode.K,
+})
+
+local TabHome = Window:CreateTab("👨‍💻Painel", 4483362458)
+TabHome:CreateSection("God Mode Anti-Morte")
+
+-- CONFIGURAÇÕES
+local SAFE_HEALTH = 100000
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+
+local godEnabled = false
+
+-- Armazena todas as conexões para limpar depois
+local connections = {}
+
+local function clearConnections()
+    for _, conn in pairs(connections) do
+        if conn then pcall(function() conn:Disconnect() end) end
+    end
+    connections = {}
+end
+
+local function forceHealth(humanoid)
+    if not humanoid or not humanoid.Parent then return end
+    pcall(function()
+        humanoid.MaxHealth = SAFE_HEALTH
+        humanoid.Health = SAFE_HEALTH
+    end)
+end
+
+local function applyGodMode(char)
+    if not char then return end
+
+    -- Aguarda o Humanoid carregar
+    local humanoid = char:FindFirstChildWhichIsA("Humanoid")
+        or char:WaitForChild("Humanoid", 5)
+    if not humanoid then return end
+
+    -- Seta vida imediatamente
+    forceHealth(humanoid)
+
+    -- [CAMADA 1] Heartbeat — repõe vida todo frame
+    local hbConn = RunService.Heartbeat:Connect(function()
+        if humanoid and humanoid.Parent then
+            if humanoid.Health < SAFE_HEALTH then
+                forceHealth(humanoid)
+            end
+        end
+    end)
+    table.insert(connections, hbConn)
+
+    -- [CAMADA 2] HealthChanged — reage instantaneamente a qualquer dano
+    local hcConn = humanoid.HealthChanged:Connect(function(newHealth)
+        if newHealth < SAFE_HEALTH then
+            task.defer(function()  -- defer garante que roda no mesmo frame, depois do evento
+                forceHealth(humanoid)
+            end)
+        end
+    end)
+    table.insert(connections, hcConn)
+
+    -- [CAMADA 3] Sobrescreve TakeDamage para não fazer nada
+    pcall(function()
+        humanoid.TakeDamage = function() end
+    end)
+
+    -- [CAMADA 4] Se mesmo assim morrer → respawn imediato
+    local diedConn = humanoid.Died:Connect(function()
+        if godEnabled then
+            task.wait(0.1)
+            pcall(function() player:LoadCharacter() end)
+        end
+    end)
+    table.insert(connections, diedConn)
+
+    -- [CAMADA 5] Protege contra scripts que reduzem MaxHealth dinamicamente
+    local maxConn = humanoid:GetPropertyChangedSignal("MaxHealth"):Connect(function()
+        if humanoid.MaxHealth < SAFE_HEALTH then
+            pcall(function() humanoid.MaxHealth = SAFE_HEALTH end)
+        end
+    end)
+    table.insert(connections, maxConn)
+end
+
+local function startGodMode()
+    godEnabled = true
+    clearConnections()
+
+    -- Aplica no personagem atual
+    local char = player.Character
+    if char then applyGodMode(char) end
+
+    -- Aplica em cada respawn
+    local spawnConn = player.CharacterAdded:Connect(function(newChar)
+        if godEnabled then
+            task.wait(0.2) -- pequeno delay para o personagem carregar
+            applyGodMode(newChar)
+        end
+    end)
+    table.insert(connections, spawnConn)
+end
+
+local function stopGodMode()
+    godEnabled = false
+    clearConnections()
+
+    -- Restaura a vida normal
+    local char = player.Character
+    if char then
+        local humanoid = char:FindFirstChildWhichIsA("Humanoid")
+        if humanoid then
+            pcall(function()
+                humanoid.MaxHealth = 100
+                humanoid.Health = 100
+            end)
+        end
+    end
+end
+
+-- Botão Toggle
+TabHome:CreateButton({
+    Name = "⚡ God Mode Anti-Morte (Toggle)",
+    Callback = function()
+        if not godEnabled then
+            startGodMode()
+            Rayfield:Notify({
+                Title = "✅ God Mode ATIVADO",
+                Content = "5 camadas de proteção ativas. Você não vai morrer!",
+                Duration = 4
+            })
+        else
+            stopGodMode()
+            Rayfield:Notify({
+                Title = "❌ God Mode DESATIVADO",
+                Content = "Proteção removida. Vida restaurada para 100.",
+                Duration = 3
+            })
+        end
+    end
+})
+
+-- Indicador de status (mostra se God Mode está ativo)
+TabHome:CreateButton({
+    Name = "📊 Ver Status do God Mode",
+    Callback = function()
+        local status = godEnabled and "🟢 ATIVO" or "🔴 INATIVO"
+        local conns = #connections
+        Rayfield:Notify({
+            Title = "Status: " .. status,
+            Content = "Conexões ativas: " .. conns,
+            Duration = 3
+        })
+    end
+})
